@@ -1,0 +1,4 @@
+This demonstration page and its model weights are released under the GNU Affero General Public License v3.0 (AGPL-3.0),
+because the detector was trained with Ultralytics YOLOv8 (AGPL-3.0). Full licence text: https://www.gnu.org/licenses/agpl-3.0.txt
+ONNX Runtime Web (ort*.js, ort*.mjs, ort*.wasm) is (c) Microsoft Corporation, MIT License.
+The training images are not included and are not covered by this licence.

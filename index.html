@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SWIFT-US Detector</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single working column — status bar, image stage, controls, findings; built for a phone held in one hand */
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --fg:#17202a; --muted:#5b6673; --line:#d9dee5;
+  --accent:#0b6fb8; --accent-ink:#ffffff; --warn-bg:#fff4e0; --warn-fg:#7a4b00; --warn-line:#f0c67a;
+  --box:#1e90ff; --box2:#e69f00; --stage:#0a0c10;
+  --font:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1318; --panel:#161b22; --fg:#e8edf2; --muted:#9aa6b2; --line:#2a323c;
+  --accent:#4ea3e8; --accent-ink:#0b1420; --warn-bg:#2b2111; --warn-fg:#f3c878; --warn-line:#5a4113;
+  --box:#4ea3e8; --box2:#f0b64a; --stage:#05070a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1318; --panel:#161b22; --fg:#e8edf2; --muted:#9aa6b2; --line:#2a323c;
+  --accent:#4ea3e8; --accent-ink:#0b1420; --warn-bg:#2b2111; --warn-fg:#f3c878; --warn-line:#5a4113;
+  --box:#4ea3e8; --box2:#f0b64a; --stage:#05070a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.45;margin:0;padding-block:0 32px;padding-inline:16px}
+.wrap{max-width:760px;margin:0 auto;display:grid;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;padding-block:18px 4px}
+header h1{font-size:1.35rem;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+header .sub{color:var(--muted);font-size:.92rem;margin:0;flex-basis:100%}
+.badge{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--warn-line);background:var(--warn-bg);color:var(--warn-fg);padding:3px 8px;border-radius:4px}
+.notice{border:1px solid var(--warn-line);background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;padding:10px 12px;font-size:.9rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stage{background:var(--stage);border-radius:8px;overflow:hidden;position:relative;min-height:180px;display:grid;place-items:center}
+.stage canvas{display:block;max-width:100%;height:auto}
+.stage .empty{color:#9aa6b2;font-size:.9rem;text-align:center;padding:28px 16px;max-width:36ch}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{appearance:none;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;padding:10px 16px;border-radius:8px;cursor:pointer;min-height:44px}
+.btn.secondary{background:transparent;color:var(--accent)}
+.btn:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+label.slider{display:grid;gap:4px;flex:1 1 220px;min-width:0;font-size:.9rem;color:var(--muted)}
+label.slider output{font-family:var(--mono);color:var(--fg)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.status{font-family:var(--mono);font-size:.8rem;color:var(--muted);display:flex;gap:8px;align-items:center;min-height:1.4em}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.status.ok .dot{background:#2e9e5b}.status.busy .dot{background:var(--box2)}.status.err .dot{background:#d1434b}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{color:var(--muted);font-weight:500;font-size:.8rem;letter-spacing:.04em;text-transform:uppercase}
+td.conf{font-family:var(--mono)}
+.sw{display:inline-block;width:12px;height:12px;border:2px solid var(--box);vertical-align:-1px;margin-right:6px}
+.sw.c1{border-color:var(--box2)}
+details{color:var(--muted);font-size:.88rem}
+details summary{cursor:pointer;color:var(--fg)}
+details p{margin:.5em 0}
+code{font-family:var(--mono);font-size:.85em}
+@media (prefers-reduced-motion:no-preference){.status.busy .dot{animation:pulse 1s infinite alternate}}
+@keyframes pulse{to{opacity:.3}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>SWIFT-US fracture detector</h1>
+    <span class="badge">Research prototype</span>
+    <p class="sub">Point-of-care ultrasound &middot; distal forearm fracture and elbow effusion &middot; the model runs in your browser, the image never leaves this device.</p>
+  </header>
+
+  <div class="notice"><strong>Not for clinical use.</strong> This page demonstrates a research model (YOLOv8n trained on expert-annotated fracture-sonography views). Its output is a region of interest with a confidence score, not a diagnosis. Do not use it to make or defer clinical decisions.</div>
+
+  <div class="panel" style="display:grid;gap:12px">
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">Loading model…</span></div>
+    <div class="stage" id="stage">
+      <div class="empty" id="empty">Choose an ultrasound image (a longitudinal view of the distal radius or ulna, or a dorsal elbow view). On a phone you can photograph the scanner screen.</div>
+      <canvas id="canvas" hidden></canvas>
+    </div>
+    <div class="row">
+      <label class="btn" for="file">Choose image</label>
+      <input type="file" id="file" accept="image/*">
+      <label class="btn secondary" for="camera" id="cameraLabel">Take photo</label>
+      <input type="file" id="camera" accept="image/*" capture="environment">
+      <label class="slider">Confidence threshold <output id="thrOut">0.25</output>
+        <input type="range" id="thr" min="0.05" max="0.9" step="0.01" value="0.25"></label>
+    </div>
+  </div>
+
+  <div class="panel" id="resultsPanel" hidden>
+    <table>
+      <thead><tr><th>Finding</th><th>Confidence</th><th>Region (x, y, w, h in px)</th></tr></thead>
+      <tbody id="results"></tbody>
+    </table>
+    <p id="none" class="status" hidden><span class="dot"></span><span>No region above the threshold.</span></p>
+    <p class="status" id="timing"></p>
+  </div>
+
+  <details>
+    <summary>How this works and what it was trained on</summary>
+    <p>The detector is the YOLOv8n model from the SWIFT-US proof-of-concept study: 3.0 M parameters, trained on 2 253 single views from 455 examinations acquired with the SAFE protocols and annotated by an orthopaedic surgeon. Under five-fold cross-validation by examination it reached an examination-level AUC of 0.97 for distal forearm fractures. The weights shown here are from one cross-validation fold.</p>
+    <p>Processing: the image is converted to greyscale, letterboxed to 640 &times; 640 px and passed to the network with ONNX Runtime Web (WebAssembly). Boxes are decoded, filtered at the chosen threshold and merged with non-maximum suppression (IoU 0.5). Nothing is uploaded; the page only needed the network to download the model (12 MB) and the runtime (11 MB) once.</p>
+    <p>Classes: <span class="sw"></span>fracture (distal forearm, proximal humerus) &middot; <span class="sw c1"></span>joint effusion (elbow). Elbow effusion detection is weak in this model and is shown for completeness.</p>
+    <p>Expected inputs are B-mode ultrasound views like those of the training set; photographs of a screen work but with lower confidence. Other image types will produce meaningless output.</p>
+  </details>
+</div>
+
+<script src="ort.wasm.min.js"></script>
+<script>
+(async function(){
+  const S=640, CLASSES=["fracture","joint effusion"], COLORS=[getCSS("--box"),getCSS("--box2")];
+  const $=id=>document.getElementById(id);
+  const status=$("status"), statusText=$("statusText"), canvas=$("canvas"), ctx=canvas.getContext("2d");
+  let session=null, lastImage=null, lastRaw=null, lastMeta=null;
+  function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+  function setStatus(kind,msg){status.className="status "+kind; statusText.textContent=msg}
+
+  try{
+    ort.env.wasm.wasmPaths="./"; ort.env.wasm.numThreads=1; ort.env.wasm.simd=true;
+    // MODEL_URL: the ONNX file. On a normal web server use "swiftus_fold0.onnx"; the artifact host serves it under a .wasm name.
+    const MODEL_URL = (window.SWIFTUS_MODEL_URL) || "swiftus_fold0.onnx";
+    const buf=await (await fetch(MODEL_URL)).arrayBuffer();
+    session=await ort.InferenceSession.create(new Uint8Array(buf),{executionProviders:["wasm"]});
+    setStatus("ok","Model ready (YOLOv8n, fold 0, 12 MB).");
+  }catch(e){ setStatus("err","Could not load the model in this browser: "+(e&&e.message||e)); console.error(e); return; }
+
+  $("file").addEventListener("change",e=>handle(e.target.files[0]));
+  $("camera").addEventListener("change",e=>handle(e.target.files[0]));
+  $("thr").addEventListener("input",()=>{$("thrOut").value=(+$("thr").value).toFixed(2); if(lastRaw) render();});
+  const stage=$("stage");
+  stage.addEventListener("dragover",e=>{e.preventDefault()}); stage.addEventListener("drop",e=>{e.preventDefault(); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) handle(f);});
+
+  async function handle(file){
+    if(!file) return;
+    const img=await loadImage(file); lastImage=img;
+    setStatus("busy","Running the detector…");
+    const t0=performance.now();
+    const {tensor,meta}=preprocess(img); lastMeta=meta;
+    const out=await session.run({images:tensor});
+    lastRaw=out.output0.data; // Float32Array 6*8400
+    const dt=performance.now()-t0;
+    render(); setStatus("ok","Done.");
+    $("timing").textContent=`Inference ${dt.toFixed(0)} ms on this device, input ${img.width} x ${img.height} px`;
+  }
+  function loadImage(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{URL.revokeObjectURL(u);res(im)}; im.onerror=rej; im.src=u;})}
+
+  function preprocess(img){
+    const w=img.width,h=img.height, r=Math.min(S/w,S/h), nw=Math.round(w*r), nh=Math.round(h*r), dx=Math.floor((S-nw)/2), dy=Math.floor((S-nh)/2);
+    const c=document.createElement("canvas"); c.width=S; c.height=S; const g=c.getContext("2d");
+    g.fillStyle="rgb(114,114,114)"; g.fillRect(0,0,S,S); g.drawImage(img,dx,dy,nw,nh);
+    const d=g.getImageData(0,0,S,S).data, n=S*S, f=new Float32Array(3*n);
+    for(let i=0;i<n;i++){ const p=i*4, y=(0.299*d[p]+0.587*d[p+1]+0.114*d[p+2])/255; f[i]=y; f[n+i]=y; f[2*n+i]=y; } // greyscale like the training data
+    return {tensor:new ort.Tensor("float32",f,[1,3,S,S]), meta:{r,dx,dy,w,h}};
+  }
+  function decode(raw,thr){
+    const N=8400, dets=[];
+    for(let i=0;i<N;i++){
+      let best=0,cls=0; for(let k=0;k<CLASSES.length;k++){const s=raw[(4+k)*N+i]; if(s>best){best=s;cls=k;}}
+      if(best<thr) continue;
+      const cx=raw[i],cy=raw[N+i],bw=raw[2*N+i],bh=raw[3*N+i];
+      dets.push({x1:cx-bw/2,y1:cy-bh/2,x2:cx+bw/2,y2:cy+bh/2,conf:best,cls});
+    }
+    dets.sort((a,b)=>b.conf-a.conf);
+    const keep=[]; for(const d of dets){ if(keep.every(k=>k.cls!==d.cls||iou(k,d)<0.5)) keep.push(d); }
+    return keep;
+  }
+  function iou(a,b){const ix=Math.max(0,Math.min(a.x2,b.x2)-Math.max(a.x1,b.x1)), iy=Math.max(0,Math.min(a.y2,b.y2)-Math.max(a.y1,b.y1)), inter=ix*iy; const u=(a.x2-a.x1)*(a.y2-a.y1)+(b.x2-b.x1)*(b.y2-b.y1)-inter; return u>0?inter/u:0;}
+
+  function render(){
+    const thr=+$("thr").value, {r,dx,dy,w,h}=lastMeta, dets=decode(lastRaw,thr);
+    canvas.width=w; canvas.height=h; canvas.hidden=false; $("empty").hidden=true;
+    ctx.drawImage(lastImage,0,0,w,h);
+    const lw=Math.max(2,Math.round(Math.min(w,h)/220)), fs=Math.max(12,Math.round(Math.min(w,h)/28));
+    ctx.font=`600 ${fs}px IBM Plex Mono, Menlo, monospace`;
+    const rows=[];
+    for(const d of dets){
+      const x1=(d.x1-dx)/r, y1=(d.y1-dy)/r, x2=(d.x2-dx)/r, y2=(d.y2-dy)/r;
+      ctx.lineWidth=lw; ctx.strokeStyle=COLORS[d.cls]; ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+      const label=`${CLASSES[d.cls]} ${d.conf.toFixed(2)}`, tw=ctx.measureText(label).width+10;
+      ctx.fillStyle=COLORS[d.cls]; ctx.fillRect(x1,Math.max(0,y1-fs-8),tw,fs+8);
+      ctx.fillStyle="#fff"; ctx.fillText(label,x1+5,Math.max(fs,y1-6));
+      rows.push(`<tr><td><span class="sw ${d.cls?'c1':''}"></span>${CLASSES[d.cls]}</td><td class="conf">${d.conf.toFixed(3)}</td><td class="conf">${Math.round(x1)}, ${Math.round(y1)}, ${Math.round(x2-x1)}, ${Math.round(y2-y1)}</td></tr>`);
+    }
+    $("results").innerHTML=rows.join(""); $("resultsPanel").hidden=false; $("none").hidden=rows.length>0;
+  }
+})();
+</script>
+
+</body>
+</html>
