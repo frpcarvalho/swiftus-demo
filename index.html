@@ -42,6 +42,7 @@ input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidde
 label.slider{display:grid;gap:4px;flex:1 1 220px;min-width:0;font-size:.9rem;color:var(--muted)}
 label.slider output{font-family:var(--mono);color:var(--fg)}
 input[type=range]{width:100%;accent-color:var(--accent)}
+select{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-height:40px;width:100%}
 .status{font-family:var(--mono);font-size:.8rem;color:var(--muted);display:flex;gap:8px;align-items:center;min-height:1.4em}
 .status .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
 .status.ok .dot{background:#2e9e5b}.status.busy .dot{background:var(--box2)}.status.err .dot{background:#d1434b}
@@ -81,6 +82,8 @@ code{font-family:var(--mono);font-size:.85em}
       <input type="file" id="file" accept="image/*">
       <label class="btn secondary" for="camera" id="cameraLabel">Take photo</label>
       <input type="file" id="camera" accept="image/*" capture="environment">
+      <label class="slider" style="flex:1 1 180px">Region examined
+        <select id="region"><option value="forearm">Distal forearm (fracture)</option><option value="humerus">Proximal humerus (fracture)</option><option value="elbow">Elbow (joint effusion)</option></select></label>
       <label class="slider">Confidence threshold <output id="thrOut">0.25</output>
         <input type="range" id="thr" min="0.05" max="0.9" step="0.01" value="0.25"></label>
     </div>
@@ -91,7 +94,7 @@ code{font-family:var(--mono);font-size:.85em}
       <thead><tr><th>Finding</th><th>Confidence</th><th>Region (x, y, w, h in px)</th></tr></thead>
       <tbody id="results"></tbody>
     </table>
-    <p id="none" class="status" hidden><span class="dot"></span><span>No region above the threshold.</span></p>
+    <p id="none" class="status" hidden><span class="dot"></span><span>No region above the threshold for the selected examination type.</span></p>
     <p class="status" id="timing"></p>
   </div>
 
@@ -99,7 +102,7 @@ code{font-family:var(--mono);font-size:.85em}
     <summary>How this works and what it was trained on</summary>
     <p>The detector is the YOLOv8n model from the SWIFT-US proof-of-concept study: 3.0 M parameters, trained on 2 253 single views from 455 examinations acquired with the SAFE protocols and annotated by an orthopaedic surgeon. Under five-fold cross-validation by examination it reached an examination-level AUC of 0.97 for distal forearm fractures. The weights shown here are from one cross-validation fold.</p>
     <p>Processing: the image is converted to greyscale, letterboxed to 640 &times; 640 px and passed to the network with ONNX Runtime Web (WebAssembly). Boxes are decoded, filtered at the chosen threshold and merged with non-maximum suppression (IoU 0.5). Nothing is uploaded; the page only needed the network to download the model (12 MB) and the runtime (11 MB) once.</p>
-    <p>Classes: <span class="sw"></span>fracture (distal forearm, proximal humerus) &middot; <span class="sw c1"></span>joint effusion (elbow). Elbow effusion detection is weak in this model and is shown for completeness.</p>
+    <p>Classes: <span class="sw"></span>fracture (distal forearm, proximal humerus) &middot; <span class="sw c1"></span>joint effusion (elbow). Only the class that matches the selected region is shown, as the examiner always knows which protocol is being used; the effusion class was trained on few examples and is weak.</p>
     <p>Expected inputs are B-mode ultrasound views like those of the training set; photographs of a screen work but with lower confidence. Other image types will produce meaningless output.</p>
   </details>
 </div>
@@ -126,6 +129,8 @@ code{font-family:var(--mono);font-size:.85em}
   $("file").addEventListener("change",e=>handle(e.target.files[0]));
   $("camera").addEventListener("change",e=>handle(e.target.files[0]));
   $("thr").addEventListener("input",()=>{$("thrOut").value=(+$("thr").value).toFixed(2); if(lastRaw) render();});
+  $("region").addEventListener("change",()=>{ if(lastRaw) render(); });
+  function allowedClass(){ return $("region").value==="elbow" ? 1 : 0; }
   const stage=$("stage");
   stage.addEventListener("dragover",e=>{e.preventDefault()}); stage.addEventListener("drop",e=>{e.preventDefault(); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) handle(f);});
 
@@ -166,7 +171,7 @@ code{font-family:var(--mono);font-size:.85em}
   function iou(a,b){const ix=Math.max(0,Math.min(a.x2,b.x2)-Math.max(a.x1,b.x1)), iy=Math.max(0,Math.min(a.y2,b.y2)-Math.max(a.y1,b.y1)), inter=ix*iy; const u=(a.x2-a.x1)*(a.y2-a.y1)+(b.x2-b.x1)*(b.y2-b.y1)-inter; return u>0?inter/u:0;}
 
   function render(){
-    const thr=+$("thr").value, {r,dx,dy,w,h}=lastMeta, dets=decode(lastRaw,thr);
+    const thr=+$("thr").value, {r,dx,dy,w,h}=lastMeta, dets=decode(lastRaw,thr).filter(d=>d.cls===allowedClass());
     canvas.width=w; canvas.height=h; canvas.hidden=false; $("empty").hidden=true;
     ctx.drawImage(lastImage,0,0,w,h);
     const lw=Math.max(2,Math.round(Math.min(w,h)/220)), fs=Math.max(12,Math.round(Math.min(w,h)/28));
